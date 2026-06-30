@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS t_consultation_message (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  session_id BIGINT NOT NULL,
+  role VARCHAR(20) NOT NULL,
+  content CLOB NOT NULL,
+  citations CLOB,
+  create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);

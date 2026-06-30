@@ -101,6 +101,18 @@ CREATE TABLE IF NOT EXISTS `t_consultation_session` (
   KEY `idx_patient_id` (`patient_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI问诊会话表';
 
+-- 6.1 AI问诊会话消息表（含 RAG 引用来源）
+CREATE TABLE IF NOT EXISTS `t_consultation_message` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '消息ID',
+  `session_id` bigint(20) NOT NULL COMMENT '所属会话ID',
+  `role` varchar(20) NOT NULL COMMENT '消息角色 (user/assistant)',
+  `content` text NOT NULL COMMENT '消息内容',
+  `citations` json DEFAULT NULL COMMENT 'RAG引用来源(JSON数组，仅assistant消息)',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_session_id` (`session_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI问诊会话消息表';
+
 -- 8. 处方审核字段迁移（已有数据库升级用）
 -- ALTER TABLE `t_prescription`
 --   ADD COLUMN `pharmacist_id` bigint(20) DEFAULT NULL COMMENT '审核药师ID' AFTER `audit_status`,

@@ -1,6 +1,0 @@
-com/smart/health/registration/util/OrderSnGeneratorTest.class
-com/smart/health/registration/TestApplication.class
-com/smart/health/registration/service/RegistrationOrderServiceImplTest.class
-com/smart/health/registration/service/ScheduleServiceImplTest.class
-com/smart/health/registration/controller/ScheduleControllerTest.class
-com/smart/health/registration/consumer/RegistrationOrderConsumerTest.class

@@ -2,6 +2,7 @@ package com.smart.health.consultation.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smart.health.consultation.dto.ConsultStreamRequest;
+import com.smart.health.consultation.dto.ConsultStreamResponse;
 import com.smart.health.consultation.dto.SessionHistoryVO;
 import com.smart.health.consultation.dto.SessionVO;
 import com.smart.health.consultation.service.ConsultationService;
@@ -111,8 +112,15 @@ class AiConsultControllerTest {
         }
 
         @Test
-        @DisplayName("GET /api/v1/ai/sessions/{sessionSn}/history 返回完整对话历史")
+        @DisplayName("GET /api/v1/ai/sessions/{sessionSn}/history 返回完整对话历史含 citations")
         void getSessionHistory_validSession_returnsHistory() throws Exception {
+            var citations = List.of(
+                    ConsultStreamResponse.Citation.builder()
+                            .title("Guide A")
+                            .category("Clinical Guideline")
+                            .snippet("Sample snippet")
+                            .build()
+            );
             var history = List.of(
                     SessionHistoryVO.builder()
                             .role("user")
@@ -123,6 +131,7 @@ class AiConsultControllerTest {
                             .role("assistant")
                             .content("建议您先休息，如果持续请就医。")
                             .timestamp("2026-06-28T10:00:05")
+                            .citations(citations)
                             .build()
             );
             when(consultationService.getSessionHistory("session_001", 0L))
@@ -134,7 +143,13 @@ class AiConsultControllerTest {
                     .andExpect(jsonPath("$.data.length()").value(2))
                     .andExpect(jsonPath("$.data[0].role").value("user"))
                     .andExpect(jsonPath("$.data[0].content").value("我头痛怎么办"))
-                    .andExpect(jsonPath("$.data[1].role").value("assistant"));
+                    .andExpect(jsonPath("$.data[0].timestamp").value("2026-06-28T10:00:00"))
+                    .andExpect(jsonPath("$.data[0].createTime").doesNotExist())
+                    .andExpect(jsonPath("$.data[1].role").value("assistant"))
+                    .andExpect(jsonPath("$.data[1].citations.length()").value(1))
+                    .andExpect(jsonPath("$.data[1].citations[0].title").value("Guide A"))
+                    .andExpect(jsonPath("$.data[1].citations[0].category").value("Clinical Guideline"))
+                    .andExpect(jsonPath("$.data[1].citations[0].snippet").value("Sample snippet"));
         }
 
         @Test

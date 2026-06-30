@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.smart.health.user.service.PatientAuthServiceTest
--------------------------------------------------------------------------------
-Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.728 s -- in com.smart.health.user.service.PatientAuthServiceTest

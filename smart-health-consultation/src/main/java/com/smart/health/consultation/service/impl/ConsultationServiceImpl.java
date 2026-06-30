@@ -9,7 +9,9 @@ import com.smart.health.consultation.dto.ConsultStreamRequest;
 import com.smart.health.consultation.dto.ConsultStreamResponse;
 import com.smart.health.consultation.dto.SessionHistoryVO;
 import com.smart.health.consultation.dto.SessionVO;
+import com.smart.health.consultation.entity.ConsultationMessage;
 import com.smart.health.consultation.entity.ConsultationSession;
+import com.smart.health.consultation.mapper.ConsultationMessageMapper;
 import com.smart.health.consultation.mapper.ConsultationSessionMapper;
 import com.smart.health.consultation.service.ConsultationService;
 import com.smart.health.consultation.service.RagRetrievalService;
@@ -41,6 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ConsultationServiceImpl implements ConsultationService {
 
     private final ConsultationSessionMapper sessionMapper;
+    private final ConsultationMessageMapper messageMapper;
     private final RagRetrievalService ragRetrievalService;
     private final OpenAiChatClient chatClient;
     private final ObjectMapper objectMapper;
@@ -145,9 +148,9 @@ public class ConsultationServiceImpl implements ConsultationService {
                                 emitter.send(SseEmitter.event().data("[DONE]"));
                                 emitter.complete();
 
-                                // 保存对话记录到会话
+                                // 保存对话记录到会话（含 citations 持久化）
                                 saveChatTurn(session, chatHistory, request.getMessage(),
-                                        fullResponse.toString());
+                                        fullResponse.toString(), citations);
                                 log.info("问诊流式响应完成, sessionSn={}, 本轮回答长度={}",
                                         sessionSnRef.get(), fullResponse.length());
                             } catch (IOException e) {
@@ -212,6 +215,10 @@ public class ConsultationServiceImpl implements ConsultationService {
             throw new BusinessException("无权访问该会话");
         }
         List<Map<String, String>> chatLog = parseChatLog(session.getChatLog());
+        List<SessionHistoryVO> persisted = messageMapper.selectHistoryBySessionId(session.getId());
+        if (!persisted.isEmpty()) {
+            return persisted;
+        }
         List<SessionHistoryVO> history = new ArrayList<>();
         for (Map<String, String> turn : chatLog) {
             history.add(SessionHistoryVO.builder()
@@ -303,7 +310,8 @@ public class ConsultationServiceImpl implements ConsultationService {
      * 保存一轮对话（用户消息 + AI 回复）到会话的 chatLog
      */
     private void saveChatTurn(ConsultationSession session, List<Map<String, String>> existingHistory,
-                               String userMessage, String assistantResponse) {
+                               String userMessage, String assistantResponse,
+                               List<ConsultStreamResponse.Citation> citations) {
         Map<String, String> userTurn = new LinkedHashMap<>();
         userTurn.put("role", "user");
         userTurn.put("content", userMessage);
@@ -319,9 +327,23 @@ public class ConsultationServiceImpl implements ConsultationService {
         try {
             String updatedChatLog = objectMapper.writeValueAsString(existingHistory);
             sessionMapper.updateChatLog(session.getId(), updatedChatLog);
-            log.debug("对话记录已保存, sessionSn={}, 总轮数={}", session.getSessionSn(), existingHistory.size() / 2);
         } catch (JsonProcessingException e) {
             log.error("序列化 chatLog 失败", e);
         }
+
+        ConsultationMessage userMsg = new ConsultationMessage();
+        userMsg.setSessionId(session.getId());
+        userMsg.setRole("user");
+        userMsg.setContent(userMessage);
+        messageMapper.insert(userMsg);
+
+        ConsultationMessage assistantMsg = new ConsultationMessage();
+        assistantMsg.setSessionId(session.getId());
+        assistantMsg.setRole("assistant");
+        assistantMsg.setContent(assistantResponse);
+        assistantMsg.setCitations(citations == null || citations.isEmpty() ? null : citations);
+        messageMapper.insert(assistantMsg);
+
+        log.debug("对话记录已保存, sessionSn={}, 总轮数={}", session.getSessionSn(), existingHistory.size() / 2);
     }
 }

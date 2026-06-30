@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smart.health.consultation.mapper.ConsultationMessageMapper">
+
+    <resultMap id="SessionHistoryResultMap" type="com.smart.health.consultation.dto.SessionHistoryVO">
+        <result property="role" column="role"/>
+        <result property="content" column="content"/>
+        <result property="timestamp" column="timestamp"/>
+        <result property="citations" column="citations"
+                typeHandler="com.smart.health.consultation.mapper.handler.CitationListTypeHandler"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.smart.health.consultation.entity.ConsultationMessage"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO t_consultation_message (session_id, role, content, citations)
+        VALUES (#{sessionId}, #{role}, #{content},
+                #{citations, typeHandler=com.smart.health.consultation.mapper.handler.CitationListTypeHandler})
+    </insert>
+
+    <select id="selectHistoryBySessionId" resultMap="SessionHistoryResultMap">
+        SELECT role,
+               content,
+               REPLACE(CAST(create_time AS CHAR(19)), ' ', 'T') AS timestamp,
+               citations
+        FROM t_consultation_message
+        WHERE session_id = #{sessionId}
+        ORDER BY create_time ASC, id ASC
+    </select>
+
+</mapper>

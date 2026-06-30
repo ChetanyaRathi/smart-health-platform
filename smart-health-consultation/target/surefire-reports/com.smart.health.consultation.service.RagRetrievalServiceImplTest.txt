@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.smart.health.consultation.service.RagRetrievalServiceImplTest
--------------------------------------------------------------------------------
-Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.495 s -- in com.smart.health.consultation.service.RagRetrievalServiceImplTest

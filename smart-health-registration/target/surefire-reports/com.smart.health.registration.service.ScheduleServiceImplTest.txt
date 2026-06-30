@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.smart.health.registration.service.ScheduleServiceImplTest
--------------------------------------------------------------------------------
-Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.198 s -- in com.smart.health.registration.service.ScheduleServiceImplTest

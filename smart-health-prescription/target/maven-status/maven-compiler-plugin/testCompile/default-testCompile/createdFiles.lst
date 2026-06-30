@@ -1,9 +1,0 @@
-com/smart/health/prescription/service/PrescriptionServiceImplTest$ListByPatient.class
-com/smart/health/prescription/service/PrescriptionServiceImplTest$ListInventory.class
-com/smart/health/prescription/service/PrescriptionServiceImplTest$GetDetail.class
-com/smart/health/prescription/service/PrescriptionServiceImplTest$ListPendingAudit.class
-com/smart/health/prescription/service/PrescriptionServiceImplTest.class
-com/smart/health/prescription/util/PrescriptionCodeGeneratorTest.class
-com/smart/health/prescription/service/PrescriptionServiceImplTest$IssuePrescription.class
-com/smart/health/prescription/service/PrescriptionServiceImplTest$AuditPrescription.class
-com/smart/health/prescription/controller/PrescriptionControllerTest.class

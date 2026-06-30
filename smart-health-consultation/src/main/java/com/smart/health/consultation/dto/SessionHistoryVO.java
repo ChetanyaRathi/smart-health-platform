@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * 会话对话历史 VO（单条消息）
  */
@@ -24,4 +26,7 @@ public class SessionHistoryVO {
 
     @Schema(description = "发送时间")
     private String timestamp;
+
+    @Schema(description = "RAG 引用来源（仅 assistant 消息）")
+    private List<ConsultStreamResponse.Citation> citations;
 }

@@ -5,9 +5,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smart.health.common.exception.BusinessException;
 import com.smart.health.consultation.dto.ConsultStreamRequest;
+import com.smart.health.consultation.dto.ConsultStreamResponse;
 import com.smart.health.consultation.dto.SessionHistoryVO;
 import com.smart.health.consultation.dto.SessionVO;
+import com.smart.health.consultation.entity.ConsultationMessage;
 import com.smart.health.consultation.entity.ConsultationSession;
+import com.smart.health.consultation.mapper.ConsultationMessageMapper;
 import com.smart.health.consultation.mapper.ConsultationSessionMapper;
 import com.smart.health.consultation.service.impl.ConsultationServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +49,9 @@ class ConsultationServiceImplTest {
     private ConsultationSessionMapper sessionMapper;
 
     @Mock
+    private ConsultationMessageMapper messageMapper;
+
+    @Mock
     private RagRetrievalService ragRetrievalService;
 
     @Mock
@@ -57,7 +63,7 @@ class ConsultationServiceImplTest {
     @BeforeEach
     void setUp() {
         consultationService = new ConsultationServiceImpl(
-                sessionMapper, ragRetrievalService, chatClient, objectMapper
+                sessionMapper, messageMapper, ragRetrievalService, chatClient, objectMapper
         );
     }
 
@@ -306,6 +312,8 @@ class ConsultationServiceImplTest {
             assertThat(history.get(2).get("content")).isEqualTo("我头痛");
             assertThat(history.get(3).get("role")).isEqualTo("assistant");
             assertThat(history.get(3).get("content")).isEqualTo("你好！");
+
+            verify(messageMapper, times(2)).insert(any(ConsultationMessage.class));
         }
 
         @Test
@@ -329,8 +337,70 @@ class ConsultationServiceImplTest {
     }
 
     @Nested
-    @DisplayName("获取对话历史")
+    @DisplayName("获取对话历史 - Issue #21 citations")
     class GetSessionHistory {
+
+        @Test
+        @DisplayName("优先从消息表返回含 citations 的历史")
+        void getSessionHistory_persistedMessages_returnsCitations() {
+            List<ConsultStreamResponse.Citation> citations = List.of(
+                    ConsultStreamResponse.Citation.builder()
+                            .title("Hypertension Guideline")
+                            .category("Clinical Guideline")
+                            .snippet("BP >= 140mmHg")
+                            .build()
+            );
+            ConsultationSession session = new ConsultationSession();
+            session.setId(1L);
+            session.setSessionSn("session_001");
+            session.setPatientId(42L);
+
+            when(sessionMapper.selectBySessionSn("session_001")).thenReturn(session);
+            when(messageMapper.selectHistoryBySessionId(1L)).thenReturn(List.of(
+                    SessionHistoryVO.builder()
+                            .role("user")
+                            .content("question")
+                            .timestamp("2026-06-28T10:00:00")
+                            .build(),
+                    SessionHistoryVO.builder()
+                            .role("assistant")
+                            .content("answer")
+                            .timestamp("2026-06-28T10:00:05")
+                            .citations(citations)
+                            .build()
+            ));
+
+            List<SessionHistoryVO> result = consultationService.getSessionHistory("session_001", 42L);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).getCitations()).isNull();
+            assertThat(result.get(1).getCitations()).isEqualTo(citations);
+        }
+
+        @Test
+        @DisplayName("消息表为空时回退到 chat_log（无 citations）")
+        void getSessionHistory_emptyMessageTable_fallsBackToChatLog() throws JsonProcessingException {
+            String chatLog = objectMapper.writeValueAsString(List.of(
+                    java.util.Map.of("role", "user", "content", "我头痛", "timestamp", "2026-06-28T10:00:00"),
+                    java.util.Map.of("role", "assistant", "content", "建议就医", "timestamp", "2026-06-28T10:00:05")
+            ));
+
+            ConsultationSession session = new ConsultationSession();
+            session.setId(1L);
+            session.setSessionSn("session_001");
+            session.setPatientId(42L);
+            session.setChatLog(chatLog);
+
+            when(sessionMapper.selectBySessionSn("session_001")).thenReturn(session);
+            when(messageMapper.selectHistoryBySessionId(1L)).thenReturn(List.of());
+
+            List<SessionHistoryVO> result = consultationService.getSessionHistory("session_001", 42L);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).getRole()).isEqualTo("user");
+            assertThat(result.get(0).getTimestamp()).isEqualTo("2026-06-28T10:00:00");
+            assertThat(result.get(1).getCitations()).isNull();
+        }
 
         @Test
         @DisplayName("返回会话完整对话记录")
@@ -347,6 +417,7 @@ class ConsultationServiceImplTest {
             session.setChatLog(chatLog);
 
             when(sessionMapper.selectBySessionSn("session_001")).thenReturn(session);
+            when(messageMapper.selectHistoryBySessionId(1L)).thenReturn(List.of());
 
             List<SessionHistoryVO> result = consultationService.getSessionHistory("session_001", 42L);
 
@@ -391,10 +462,56 @@ class ConsultationServiceImplTest {
             session.setChatLog(null);
 
             when(sessionMapper.selectBySessionSn("session_001")).thenReturn(session);
+            when(messageMapper.selectHistoryBySessionId(1L)).thenReturn(List.of());
 
             List<SessionHistoryVO> result = consultationService.getSessionHistory("session_001", 42L);
 
             assertThat(result).isEmpty();
+        }
+
+        @Test
+        @DisplayName("流式完成后 assistant 消息持久化 citations")
+        void streamConsult_persistsCitationsOnAssistantMessage() throws Exception {
+            ConsultationSession session = new ConsultationSession();
+            session.setId(1L);
+            session.setSessionSn("session_001");
+            session.setPatientId(42L);
+            session.setChatLog(null);
+
+            List<ConsultStreamResponse.Citation> citations = List.of(
+                    ConsultStreamResponse.Citation.builder()
+                            .title("Guide")
+                            .category("Category")
+                            .snippet("Snippet")
+                            .build()
+            );
+
+            when(sessionMapper.selectBySessionSn("session_001")).thenReturn(session);
+            when(ragRetrievalService.retrieveAsContext(anyString(), anyInt())).thenReturn("");
+            when(ragRetrievalService.retrieveCitations(anyString(), anyInt())).thenReturn(citations);
+            when(chatClient.stream(any(org.springframework.ai.chat.prompt.Prompt.class))).thenReturn(
+                    Flux.just(new ChatResponse(List.of(new Generation("answer"))))
+            );
+
+            CountDownLatch latch = new CountDownLatch(1);
+            doAnswer(inv -> {
+                latch.countDown();
+                return 1;
+            }).when(sessionMapper).updateChatLog(anyLong(), anyString());
+
+            consultationService.streamConsult(
+                    ConsultStreamRequest.builder().sessionId("session_001").message("question").build(),
+                    42L);
+
+            assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+
+            ArgumentCaptor<ConsultationMessage> captor = ArgumentCaptor.forClass(ConsultationMessage.class);
+            verify(messageMapper, times(2)).insert(captor.capture());
+
+            ConsultationMessage assistantMsg = captor.getAllValues().get(1);
+            assertThat(assistantMsg.getRole()).isEqualTo("assistant");
+            assertThat(assistantMsg.getCitations()).isEqualTo(citations);
+            assertThat(captor.getAllValues().get(0).getCitations()).isNull();
         }
     }
 }
